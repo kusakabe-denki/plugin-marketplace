@@ -1,0 +1,8 @@
+{
+  "name": "security-self-check",
+  "displayName": "セキュリティ自己チェック",
+  "version": "1.0.0",
+  "description": "会社のセキュリティルールで、個人情報・社外秘の送信、認証情報へのアクセス、外部への送信・削除・公開などの操作を、実行前に止める・確認を求める・注意を伝える。プロジェクトの秘密情報の置き場所も自己チェックする（Windows）",
+  "author": { "name": "日下部電機 情報システム" },
+  "keywords": ["security", "hooks", "windows"]
+}

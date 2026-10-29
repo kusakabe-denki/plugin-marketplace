@@ -1,0 +1,6 @@
+.env
+*.key
+*.pem
+__pycache__/
+.claude/settings.local.json
+tests/_work/

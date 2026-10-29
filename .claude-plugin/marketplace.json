@@ -1,0 +1,15 @@
+{
+  "name": "kusakabe",
+  "owner": { "name": "日下部電機 情報システム" },
+  "metadata": {
+    "description": "日下部電機の社員向け Claude Code プラグイン"
+  },
+  "plugins": [
+    {
+      "name": "security-self-check",
+      "source": "./plugins/security-self-check",
+      "description": "会社のセキュリティルールによる実行前の確認と、秘密情報の置き場所の自己チェック",
+      "version": "1.0.0"
+    }
+  ]
+}
