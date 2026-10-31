@@ -75,6 +75,78 @@ function Get-Findings([string]$root) {
   return @{ items = $found; truncated = $truncated }
 }
 
+function Get-PluginVersion([string]$path) {
+  if (-not [IO.File]::Exists($path)) { return $null }
+  $m = [regex]::Match([IO.File]::ReadAllText($path, $script:Utf8), '"version"\s*:\s*"(\d+(\.\d+){1,3})"')
+  if ($m.Success) { return $m.Groups[1].Value } else { return $null }
+}
+
+# H13：自分（全社プラグイン）の版と、配布元の写し（組織設定の ref で取得済み）の版を比べる。
+# 組織設定の CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC でプラグインの自動更新が止まることがあるため、古ければ自分で更新する（1日1回まで）。
+# 1日1回、動いている版を管理者の監視画面へ送る（Write-GuardEvent。版の番号だけ）。利用者向けの文を返す（なければ $null）
+function Invoke-VersionCheck([string]$mode, [string]$dataDir) {
+  $root = $env:CLAUDE_PLUGIN_ROOT
+  if (-not $root) { $root = [IO.Path]::GetDirectoryName($PSScriptRoot) }
+  $root = $root.TrimEnd('\', '/')
+  $own = Get-PluginVersion ([IO.Path]::Combine($root, '.claude-plugin', 'plugin.json'))
+  if (-not $own) { return $null }
+  $name = 'security-self-check'
+  # 入っている場所は <plugins>\cache\<配布元>\<プラグイン>\<版>。配布元の写しは <plugins>\marketplaces\<配布元>\plugins\<プラグイン>
+  $verDir = [IO.DirectoryInfo]::new($root)
+  $latest = $null; $mkt = $null
+  if ($verDir.Parent -and $verDir.Parent.Parent -and $verDir.Parent.Parent.Parent -and $verDir.Parent.Parent.Parent.Name -eq 'cache') {
+    $mkt = $verDir.Parent.Parent.Name
+    $pluginsDir = $verDir.Parent.Parent.Parent.Parent.FullName
+    $latest = Get-PluginVersion ([IO.Path]::Combine($pluginsDir, 'marketplaces', $mkt, 'plugins', $name, '.claude-plugin', 'plugin.json'))
+  }
+  [void][IO.Directory]::CreateDirectory($dataDir)
+  $stampFile = [IO.Path]::Combine($dataDir, 'version-check.txt')
+  $state = if ([IO.File]::Exists($stampFile)) { [IO.File]::ReadAllText($stampFile, $script:Utf8) } else { '' }
+  $today = [DateTime]::Now.ToString('yyyy-MM-dd')
+  if (-not $state.Contains("$today|report|$own")) {
+    Write-GuardEvent 'VER' 'on' 'SessionStart' ("$own" + $(if ($latest) { "（配布元 $latest）" } else { '' }))
+    [IO.File]::AppendAllText($stampFile, "$today|report|$own`n", $script:Utf8)
+  }
+  $older = $false
+  try { $older = $latest -and ([version]$latest -gt [version]$own) } catch {}
+  if (-not $older) { return $null }
+  if ($mode -ne 'on' -or $state.Contains("$today|update|$latest")) {
+    return "注意（会社のセキュリティルール）：全社プラグイン security-self-check が古い版（$own）で動いています（最新は $latest）。Claude を起動し直しても変わらなければ、管理者に連絡してください。"
+  }
+  [IO.File]::AppendAllText($stampFile, "$today|update|$latest`n", $script:Utf8)
+  $exe = $env:CLAUDE_CODE_EXECPATH
+  if (-not $exe -or -not [IO.File]::Exists($exe)) {
+    $exe = $null
+    foreach ($c in @([IO.Path]::Combine($env:USERPROFILE, '.local', 'bin', 'claude.exe'))) { if ([IO.File]::Exists($c)) { $exe = $c } }
+    $base = [IO.Path]::Combine($env:APPDATA, 'Claude', 'claude-code')
+    if (-not $exe -and [IO.Directory]::Exists($base)) {
+      $newest = [DateTime]::MinValue
+      foreach ($c in [IO.Directory]::GetFiles($base, 'claude.exe', [IO.SearchOption]::AllDirectories)) {
+        $t = [IO.File]::GetLastWriteTime($c); if ($t -gt $newest) { $newest = $t; $exe = $c }
+      }
+    }
+  }
+  if (-not $exe) {
+    Write-GuardLog 'self-check' 'H13-noexe' "$own -> $latest"
+    Write-GuardEvent 'VER' 'outdated' 'SessionStart' "$own（配布元 $latest・更新のコマンドが見つからない）"
+    return "注意（会社のセキュリティルール）：全社プラグインが古い版（$own）です（最新は $latest）。自動で更新できなかったので、管理者に連絡してください。"
+  }
+  $psi = [Diagnostics.ProcessStartInfo]::new($exe, "plugin update `"$name@$mkt`" --scope managed")
+  $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+  $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+  $p = [Diagnostics.Process]::Start($psi)
+  $o = $p.StandardOutput.ReadToEndAsync(); $e = $p.StandardError.ReadToEndAsync()
+  $done = $p.WaitForExit(45000)
+  $ok = $done -and $p.ExitCode -eq 0
+  if (-not $done) { try { $p.Kill() } catch {} }
+  $tail = (($o.Result + ' ' + $e.Result) -replace '\s+', ' ').Trim()
+  if ($tail.Length -gt 150) { $tail = $tail.Substring($tail.Length - 150) }
+  Write-GuardLog 'self-check' "H13-$(if ($ok) { 'updated' } else { 'failed' })" "$own -> $latest`t$tail"
+  Write-GuardEvent 'VER' $(if ($ok) { 'updated' } else { 'outdated' }) 'SessionStart' "$own → $latest$(if (-not $ok) { '（自動更新に失敗）' })"
+  if ($ok) { return "お知らせ（会社のセキュリティルール）：全社プラグイン security-self-check を $own から $latest に更新しました。Claude を起動し直すと新しい版で動きます。" }
+  return "注意（会社のセキュリティルール）：全社プラグインが古い版（$own）で、自動の更新に失敗しました（最新は $latest）。Claude を起動し直しても変わらなければ、管理者に連絡してください。"
+}
+
 # H12：リポジトリの罠。「相対パス<TAB>種類<TAB>内容の指紋」の一覧を返す
 function Get-TrapFindings([string]$root) {
   $found = [System.Collections.Generic.List[string]]::new()
@@ -155,22 +227,34 @@ try {
     exit 0
   }
 
-  $m5 = Get-GuardMode 'H5'; $m12 = Get-GuardMode 'H12'
-  if ($m5 -eq 'off' -and $m12 -eq 'off') { exit 0 }
+  $m5 = Get-GuardMode 'H5'; $m12 = Get-GuardMode 'H12'; $m13 = Get-GuardMode 'H13'
+  if ($m5 -eq 'off' -and $m12 -eq 'off' -and $m13 -eq 'off') { exit 0 }
   $raw = Read-HookInput
   $source = Get-JsonString $raw 'source'
   if ($source -and $source -ne 'startup' -and $source -ne 'resume') { exit 0 }
-  $root = $env:CLAUDE_PROJECT_DIR
-  if (-not $root) { $root = Get-JsonString $raw 'cwd' }
-  if (-not $root -or -not [IO.Directory]::Exists($root)) { exit 0 }
-  $root = [IO.Path]::GetFullPath($root).TrimEnd('\', '/')
-  # ホームフォルダやドライブ直下は範囲が広すぎるので調べない
-  if ($root -eq $env:USERPROFILE.TrimEnd('\') -or $root.Length -le 3) { exit 0 }
-
   if (-not $DataDir) { $DataDir = [IO.Path]::Combine($env:LOCALAPPDATA, 'ClaudeGuard') }
-  $hash = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($script:Utf8.GetBytes($root.ToLowerInvariant()))).Replace('-', '').Substring(0, 16)
   $userMsgs = [System.Collections.Generic.List[string]]::new()
   $ctxs = [System.Collections.Generic.List[string]]::new()
+
+  # ---- H13 全社プラグインの版の確認と自動更新（どのフォルダでも、起動のたびに） ----
+  if ($m13 -ne 'off') {
+    try { $v = Invoke-VersionCheck $m13 $DataDir; if ($v) { $userMsgs.Add($v) } } catch {}
+  }
+  function Exit-WithMessages {
+    if ($userMsgs.Count -gt 0) {
+      $ctx = if ($ctxs.Count -gt 0) { ',"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":' + (ConvertTo-JsonText ($ctxs -join "`n`n")) + '}' } else { '' }
+      Write-HookJson ('{"systemMessage":' + (ConvertTo-JsonText ($userMsgs -join "`n")) + $ctx + '}')
+    }
+    exit 0
+  }
+
+  $root = $env:CLAUDE_PROJECT_DIR
+  if (-not $root) { $root = Get-JsonString $raw 'cwd' }
+  if (-not $root -or -not [IO.Directory]::Exists($root)) { Exit-WithMessages }
+  $root = [IO.Path]::GetFullPath($root).TrimEnd('\', '/')
+  # ホームフォルダやドライブ直下は範囲が広すぎるので調べない
+  if ($root -eq $env:USERPROFILE.TrimEnd('\') -or $root.Length -le 3) { Exit-WithMessages }
+  $hash = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($script:Utf8.GetBytes($root.ToLowerInvariant()))).Replace('-', '').Substring(0, 16)
 
   # ---- H12 リポジトリの罠（開くたびに調べ、まだ知らせていないものだけ） ----
   if ($m12 -ne 'off') {
@@ -200,10 +284,7 @@ try {
     [IO.File]::WriteAllText($stamp, $today)
     $r = Get-Findings $root
   }
-  if ($r.items.Count -eq 0) {
-    if ($userMsgs.Count -gt 0) { Write-HookJson ('{"systemMessage":' + (ConvertTo-JsonText ($userMsgs -join "`n")) + ',"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":' + (ConvertTo-JsonText ($ctxs -join "`n`n")) + '}}') }
-    exit 0
-  }
+  if ($r.items.Count -eq 0) { Exit-WithMessages }
   Write-GuardLog 'self-check' 'found' "$root`t$($r.items.Count)"
   $kinds = [System.Collections.Generic.HashSet[string]]::new()
   foreach ($x in $r.items) { [void]$kinds.Add($x.Split("`t")[1]) }
@@ -213,8 +294,7 @@ try {
   $list = $lines -join "`n"
   $ctx = "会社のセキュリティルールの自己チェック（security-self-check）で、このプロジェクトに要修正の箇所が見つかった。秘密情報はコード・.env に置かず Secret Manager に移し、API はサービスアカウントの IAM 権限で呼ぶのが会社のルール。キーの再発行は利用者の指示がない限りしない。利用者に知らせ、了解を得てから security-self-check スキルの手順で直すこと。`n$list"
   $userMsgs.Add($msg); $ctxs.Add($ctx)
-  Write-HookJson ('{"systemMessage":' + (ConvertTo-JsonText ($userMsgs -join "`n")) + ',"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":' + (ConvertTo-JsonText ($ctxs -join "`n`n")) + '}}')
-  exit 0
+  Exit-WithMessages
 } catch {
   exit 0
 }

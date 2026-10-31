@@ -232,7 +232,41 @@ check("R13 送れなかったときは残して次回に送る", os.path.exists(
 code, out, _ = run("pretool-guard.ps1", T("Bash", {"command": "curl https://example.invalid/x"}), S2)
 check("R13 送信先がなければ記録しない", not os.path.exists(outbox))
 
-total = len(CASES) + 21
+# ---- H13 版の確認と自動更新 ----
+def fake_plugins(name, own, latest):
+    base = os.path.join(WORK, name, "plugins")
+    for d, v in ((os.path.join(base, "cache", "kusakabe", "security-self-check", own), own),
+                 (os.path.join(base, "marketplaces", "kusakabe", "plugins", "security-self-check"), latest)):
+        os.makedirs(os.path.join(d, ".claude-plugin"), exist_ok=True)
+        json.dump({"name": "security-self-check", "version": v}, open(os.path.join(d, ".claude-plugin", "plugin.json"), "w"))
+    return os.path.join(base, "cache", "kusakabe", "security-self-check", own)
+
+
+PS = os.path.join(os.environ["SystemRoot"], "System32", "WindowsPowerShell", "v1.0", "powershell.exe")  # 更新に失敗する偽物
+CMD = os.path.join(os.environ["SystemRoot"], "System32", "cmd.exe")                                     # 更新に成功する偽物
+home = os.path.join(WORK, "home13"); os.makedirs(home)
+ss13 = {"hook_event_name": "SessionStart", "source": "startup", "cwd": home}
+v13 = lambda root, exe, dd, extra=None: run("session-check.ps1", ss13, {"CLAUDE_PLUGIN_ROOT": root, "CLAUDE_CODE_EXECPATH": exe, "USERPROFILE": home, **rep, **(extra or {})}, ("-DataDir", os.path.join(WORK, dd)))
+if os.path.exists(outbox):
+    os.remove(outbox)
+code, out, _ = v13(fake_plugins("same", "1.1.1", "1.1.1"), CMD, "dd-same")
+lines = open(outbox, encoding="utf-8").read().splitlines() if os.path.exists(outbox) else []
+check("H13 同じ版なら何も出さず、版を 1 日 1 回報告する", out == "" and len(lines) == 1 and '"rule":"VER"' in lines[0] and "1.1.1" in lines[0], out[:80])
+code, out, _ = v13(fake_plugins("same", "1.1.1", "1.1.1"), CMD, "dd-same")
+lines = open(outbox, encoding="utf-8").read().splitlines() if os.path.exists(outbox) else []
+check("H13 同じ日の 2 回目は報告しない", out == "" and len(lines) == 1)
+code, out, sec = v13(fake_plugins("old-ok", "1.1.0", "1.1.1"), CMD, "dd-ok")
+check("H13 古い版なら自動で更新し、起動し直すよう知らせる", "1.1.0 から 1.1.1 に更新しました" in out, f"{sec:.1f} 秒 {out[:60]}")
+code, out, _ = v13(fake_plugins("old-ng", "1.1.0", "1.1.1"), PS, "dd-ng")
+check("H13 更新に失敗したら管理者への連絡を促す", "自動の更新に失敗" in out)
+code, out, _ = v13(fake_plugins("old-ng", "1.1.0", "1.1.1"), PS, "dd-ng")
+check("H13 同じ日は更新をやり直さず、古い版だと知らせる", "古い版（1.1.0）" in out and "失敗" not in out)
+code, out, _ = v13(fake_plugins("old-warn", "1.1.0", "1.1.1"), CMD, "dd-warn", {"KUSAKABE_GUARD_H13": "warn"})
+check("H13 warn では更新せず知らせるだけ", "古い版（1.1.0）" in out and "更新しました" not in out)
+evs = [json.loads(l) for l in open(outbox, encoding="utf-8").read().splitlines()] if os.path.exists(outbox) else []
+check("H13 更新の成否を監視画面へ送る", any(e["mode"] == "updated" for e in evs) and any(e["mode"] == "outdated" for e in evs))
+
+total = len(CASES) + 28
 print(f"\n処理時間：平均 {sum(times) / len(times):.2f} 秒、最大 {max(times):.2f} 秒")
 print(f"結果：{total - ng}/{total} 件 OK")
 sys.exit(1 if ng else 0)

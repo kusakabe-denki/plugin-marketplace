@@ -49,7 +49,7 @@
             "type": "command",
             "command": "powershell.exe",
             "args": ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "${CLAUDE_PLUGIN_ROOT}/scripts/session-check.ps1", "-DataDir", "${CLAUDE_PLUGIN_DATA}"],
-            "timeout": 15,
+            "timeout": 60,
             "onFailure": "continue"
           }
         ]

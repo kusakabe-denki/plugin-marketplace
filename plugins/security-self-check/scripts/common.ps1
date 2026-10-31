@@ -5,10 +5,10 @@ $script:Utf8 = [System.Text.UTF8Encoding]::new($false)
 
 # 段階ごとの既定の動作。組織設定の env で切り替える
 #   KUSAKABE_GUARD_STAGE = 1（試行・既定）／2（本番）
-#   KUSAKABE_GUARD_H1〜H12 = block / ask / warn / on / off で個別に上書き
+#   KUSAKABE_GUARD_H1〜H13 = block / ask / warn / on / off で個別に上書き（H13 は on＝自動で更新／warn＝知らせるだけ）
 $script:StageModes = @{
-  '1' = @{ H1 = 'warn';  H2 = 'warn';  H3 = 'off'; H4 = 'warn'; H5 = 'on'; H6 = 'off'; H7 = 'off'; H8 = 'on';    H9 = 'warn'; H10 = 'warn'; H11 = 'warn'; H12 = 'on' }
-  '2' = @{ H1 = 'block'; H2 = 'block'; H3 = 'ask'; H4 = 'warn'; H5 = 'on'; H6 = 'ask'; H7 = 'ask'; H8 = 'block'; H9 = 'warn'; H10 = 'ask';  H11 = 'ask';  H12 = 'on' }
+  '1' = @{ H1 = 'warn';  H2 = 'warn';  H3 = 'off'; H4 = 'warn'; H5 = 'on'; H6 = 'off'; H7 = 'off'; H8 = 'on';    H9 = 'warn'; H10 = 'warn'; H11 = 'warn'; H12 = 'on'; H13 = 'on' }
+  '2' = @{ H1 = 'block'; H2 = 'block'; H3 = 'ask'; H4 = 'warn'; H5 = 'on'; H6 = 'ask'; H7 = 'ask'; H8 = 'block'; H9 = 'warn'; H10 = 'ask';  H11 = 'ask';  H12 = 'on'; H13 = 'on' }
 }
 
 function Get-GuardMode([string]$id) {
@@ -75,7 +75,9 @@ function Write-GuardEvent([string]$rule, [string]$mode, [string]$tool, [string]$
     $path = [IO.Path]::Combine($dir, 'outbox.jsonl')
     if ([IO.File]::Exists($path) -and ([IO.FileInfo]::new($path)).Length -gt 1MB) { return }
     if ($detail.Length -gt 200) { $detail = $detail.Substring(0, 200) }
-    $line = '{"ts":' + (ConvertTo-JsonText ([DateTimeOffset]::Now.ToString('o'))) + ',"user":' + (ConvertTo-JsonText "$env:USERNAME") +
+    # 利用者は Claude のアカウント（メールアドレス）で示す。取れないときは Windows のユーザー名
+    $who = if ($env:CLAUDE_CODE_USER_EMAIL) { $env:CLAUDE_CODE_USER_EMAIL } else { "$env:USERNAME" }
+    $line = '{"ts":' + (ConvertTo-JsonText ([DateTimeOffset]::Now.ToString('o'))) + ',"user":' + (ConvertTo-JsonText $who) +
       ',"host":' + (ConvertTo-JsonText "$env:COMPUTERNAME") + ',"rule":' + (ConvertTo-JsonText $rule) + ',"mode":' + (ConvertTo-JsonText $mode) +
       ',"tool":' + (ConvertTo-JsonText $tool) + ',"detail":' + (ConvertTo-JsonText $detail) + "}`n"
     [IO.File]::AppendAllText($path, $line, $script:Utf8)
