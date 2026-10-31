@@ -4,3 +4,4 @@
 __pycache__/
 .claude/settings.local.json
 tests/_work/
+tests/_work_traps/

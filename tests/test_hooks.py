@@ -13,7 +13,13 @@ SCRIPTS = os.path.join(ROOT, "plugins", "security-self-check", "scripts")
 WORK = os.path.join(ROOT, "tests", "_work")
 B = "\\"
 
-shutil.rmtree(WORK, ignore_errors=True)
+def _force(func, path, _):
+    os.chmod(path, 0o666)  # git の内部ファイルなど読み取り専用のものも消す
+    func(path)
+
+
+if os.path.exists(WORK):
+    shutil.rmtree(WORK, onerror=_force)
 os.makedirs(WORK)
 
 
@@ -137,7 +143,7 @@ os.makedirs(os.path.join(proj, "src"))
 os.makedirs(os.path.join(proj, "node_modules", "x"))
 open(os.path.join(proj, ".env"), "w", encoding="utf-8").write("PORT=8080\nAPI_KEY=dummy-value-123\n")
 open(os.path.join(proj, ".env.example"), "w", encoding="utf-8").write("API_KEY=xxxx\n")
-open(os.path.join(proj, "src", "token.py"), "w", encoding="utf-8").write("import json, os\np = os.path.expanduser('~/.clasprc.json')\n")
+open(os.path.join(proj, "src", "token.py"), "w", encoding="utf-8").write("import json, os\np = os.path.expanduser('~/.clasprc.json')\ntok = json.load(open(p))\n")
 open(os.path.join(proj, "src", "app.js"), "w", encoding="utf-8").write("const k = 'AIza" + "B" * 35 + "';\n")
 open(os.path.join(proj, "sa.json"), "w", encoding="utf-8").write('{"type": "service_account", "private_key": "-----BEGIN PRIVATE KEY-----\\nX\\n-----END PRIVATE KEY-----\\n"}')
 open(os.path.join(proj, "node_modules", "x", "k.js"), "w", encoding="utf-8").write("const k = 'AIza" + "C" * 35 + "';\n")

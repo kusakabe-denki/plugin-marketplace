@@ -15,12 +15,26 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "^(Read|Edit|Write|NotebookEdit|Grep|Glob|Bash|PowerShell)$|^mcp__.*(send|share|forward|reply|post|create_event|update_event|invite)",
+        "matcher": "^(Read|Edit|Write|NotebookEdit|Grep|Glob|Bash|PowerShell|WebFetch)$|^mcp__.*(send|share|forward|reply|post|create_event|update_event|invite)",
         "hooks": [
           {
             "type": "command",
             "command": "powershell.exe",
             "args": ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "${CLAUDE_PLUGIN_ROOT}/scripts/pretool-guard.ps1"],
+            "timeout": 15,
+            "onFailure": "continue"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^(WebFetch|WebSearch|Read|Grep|Bash|PowerShell)$|^mcp__",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe",
+            "args": ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "${CLAUDE_PLUGIN_ROOT}/scripts/posttool-inspect.ps1"],
             "timeout": 10,
             "onFailure": "continue"
           }
@@ -49,8 +63,20 @@
             "command": "powershell.exe",
             "args": ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "${CLAUDE_PLUGIN_ROOT}/scripts/config-log.ps1"],
             "timeout": 10,
-            "async": true,
             "onFailure": "continue"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe",
+            "args": ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "${CLAUDE_PLUGIN_ROOT}/scripts/report-send.ps1"],
+            "timeout": 20,
+            "async": true
           }
         ]
       }

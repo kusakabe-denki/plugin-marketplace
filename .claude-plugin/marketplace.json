@@ -8,8 +8,8 @@
     {
       "name": "security-self-check",
       "source": "./plugins/security-self-check",
-      "description": "会社のセキュリティルールによる実行前の確認と、秘密情報の置き場所の自己チェック",
-      "version": "1.0.0"
+      "description": "会社のセキュリティルールによる実行前・実行後の確認と、秘密情報の置き場所・隠し要素の自己チェック",
+      "version": "1.1.0"
     }
   ]
 }
