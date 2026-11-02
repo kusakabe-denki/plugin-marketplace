@@ -1,7 +1,7 @@
 {
   "name": "kusakabe-deploy",
   "displayName": "デプロイ受付",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "社内の Web アプリ（Cloud Run）を、手元の画面で確かめてから「デプロイ受付」を通して出す（kdeploy：画面の事前確認・本人確認・検査・GitHub への記録・反映）",
   "author": {
     "name": "日下部電機 情報システム"

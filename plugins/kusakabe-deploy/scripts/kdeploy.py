@@ -73,7 +73,7 @@ EXCLUDE = re.compile(
     r"|(^|/)\.env($|\.(?!example$|sample$|template$))"
     r"|\.(pem|key|p12|pfx|keystore|jks|log|pyc)$|(^|/)id_(rsa|ed25519)"
     r"|(^|/)\.claude/(settings\.local\.json|worktrees/)|(^|/)key\.json$|(^|/)\.deploy_setup_done$|(^|/)\.clasprc\.json$"
-    r"|^\.kusakabe/(state\.json$|incoming/)", re.I)
+    r"|^\.kusakabe/(state\.json$|state\.json\.[^/]*\.tmp$|incoming/)", re.I)
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -286,21 +286,38 @@ def make_tar(root: Path, names: list[str]) -> bytes:
 
 # ------------------------------------------------------------------ もとにした版の記録（.kusakabe/state.json）
 def load_state(root: Path) -> dict:
+    """読めないときは少し待って読み直す（ほかの kdeploy が書き換えている途中のことがある。読めないまま {} を返して
+    save_state で書き戻すと、もとにした版などの記録が消える）"""
     p = root / ".kusakabe" / "state.json"
-    try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
+    for i in range(10):
+        if not p.exists():
+            return {}
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            time.sleep(0.1 * (i + 1))
+    raise SystemExit(f"{p} を読めません。ほかの kdeploy が動いていないか確かめてください")
 
 
 def save_state(root: Path, **upd) -> dict:
-    """この PC のこのフォルダだけの記録（受付には送らない。.kusakabe/.gitignore で git にも入れない）"""
+    """この PC のこのフォルダだけの記録（受付には送らない。.kusakabe/.gitignore で git にも入れない）。
+    一時ファイルに書いてから置き換える（書いている途中の中身をほかの kdeploy に読ませない）"""
     d = root / ".kusakabe"
     d.mkdir(parents=True, exist_ok=True)
     if not (d / ".gitignore").exists():
-        (d / ".gitignore").write_text("state.json\nincoming/\n", encoding="utf-8")
+        (d / ".gitignore").write_text("state.json\nstate.json.*.tmp\nincoming/\n", encoding="utf-8")
     st = {**load_state(root), **upd, "updated": time.strftime("%Y-%m-%dT%H:%M:%S")}
-    (d / "state.json").write_text(json.dumps(st, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp = d / f"state.json.{os.getpid()}.tmp"
+    tmp.write_text(json.dumps(st, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    for i in range(10):
+        try:
+            os.replace(tmp, d / "state.json")
+            break
+        except PermissionError:   # Windows ではほかが開いている間は置き換えられない
+            time.sleep(0.1 * (i + 1))
+    else:
+        tmp.unlink(missing_ok=True)
+        raise SystemExit(f"{d / 'state.json'} を書き換えられません。ほかの kdeploy が動いていないか確かめてください")
     return st
 
 
@@ -451,9 +468,9 @@ def cmd_preview(a) -> int:
     st = load_state(root)
     if a.stop:
         pid = st.get("preview_pid")
+        save_state(root, preview_pid=0)   # 先に消す（起動した側はこれを見て記録に触らずに終わる）
         if pid:
             _kill_tree(int(pid))
-        save_state(root, preview_pid=0)
         print("手元のアプリを止めました" if pid else "止めるものはありません")
         return 0
     fp = source_fingerprint(root)
@@ -490,6 +507,8 @@ def cmd_preview(a) -> int:
     url = f"http://localhost:{port}{pv.get('path') or '/'}"
     for _ in range(int(a.wait * 2)):
         if proc.poll() is not None:
+            if load_state(root).get("preview_pid") != proc.pid:   # 起動を待つ間に preview --stop で止められた
+                return 0
             print(f"アプリが起動しませんでした（終了コード {proc.returncode}）。上の表示を確かめてください")
             save_state(root, preview_pid=0)
             return 1
