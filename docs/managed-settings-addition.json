@@ -1,15 +1,24 @@
 {
   "strictKnownMarketplaces": [
-    { "source": "github", "repo": "kusakabe-denki/plugin-marketplace", "ref": "v1.0.0" }
+    {
+      "source": "github",
+      "repo": "kusakabe-denki/plugin-marketplace",
+      "ref": "v1.0.0"
+    }
   ],
   "extraKnownMarketplaces": {
     "kusakabe": {
-      "source": { "source": "github", "repo": "kusakabe-denki/plugin-marketplace", "ref": "v1.0.0" },
+      "source": {
+        "source": "github",
+        "repo": "kusakabe-denki/plugin-marketplace",
+        "ref": "v1.0.0"
+      },
       "autoUpdate": true
     }
   },
   "enabledPlugins": {
-    "security-self-check@kusakabe": true
+    "security-self-check@kusakabe": true,
+    "kusakabe-deploy@kusakabe": true
   },
   "env": {
     "KUSAKABE_GUARD_STAGE": "1",

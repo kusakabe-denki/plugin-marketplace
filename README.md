@@ -7,6 +7,9 @@
 | プラグイン | 内容 |
 | --- | --- |
 | `security-self-check` | 会社のセキュリティルールによる、実行前・実行後の確認（フック H1〜H13）と、秘密情報の置き場所・隠し要素の自己チェック（スキル 2 つ） |
+| `kusakabe-deploy` | 社内の Web アプリ（Cloud Run）を、手元の画面で確かめてから「デプロイ受付」を通して出す（スキル 1 つ・`kdeploy`）。フックは持たない |
+
+`kusakabe-deploy` の流れ：直す → `kdeploy preview` で手元に起動して利用者が画面を確かめる → OK なら `kdeploy preview --ok` → `kdeploy deploy`。確かめた後にファイルを変えると送れない（終了コード 4）。確かめたか・省いた理由は GitHub の記録に残る。Python（`py -3`）だけで動き、追加のパッケージは要らない。
 
 ### security-self-check のフック
 

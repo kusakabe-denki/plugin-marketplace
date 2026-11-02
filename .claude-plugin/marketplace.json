@@ -1,6 +1,8 @@
 {
   "name": "kusakabe",
-  "owner": { "name": "日下部電機 情報システム" },
+  "owner": {
+    "name": "日下部電機 情報システム"
+  },
   "metadata": {
     "description": "日下部電機の社員向け Claude Code プラグイン"
   },
@@ -10,6 +12,12 @@
       "source": "./plugins/security-self-check",
       "description": "会社のセキュリティルールによる実行前・実行後の確認と、秘密情報の置き場所・隠し要素の自己チェック",
       "version": "1.1.1"
+    },
+    {
+      "name": "kusakabe-deploy",
+      "source": "./plugins/kusakabe-deploy",
+      "description": "社内の Web アプリ（Cloud Run）を、手元の画面で確かめてから「デプロイ受付」を通して出す（kdeploy：画面の事前確認・本人確認・検査・GitHub への記録・反映）",
+      "version": "1.0.0"
     }
   ]
 }
