@@ -13,6 +13,7 @@ description: 社内の Web アプリ（Cloud Run）を「デプロイ受付」�
 
 1. **設定ファイルを確かめる**：プロジェクトに `.kusakabe/app.json` が無ければ初回。分類（`app`・`polaris`・`tool` ほか）と名前を利用者に確かめ、規則（接頭辞＋小文字の英数字とハイフン）どおりの名前を提案してから `kdeploy init --name <名前> --dir <プロジェクト> --source-dir <Dockerfile のあるフォルダ>` で予約する。他人と重なったら返ってきた候補から選んでもらう
 2. **app.json を仕上げる**：`env` には秘密でない値だけ、`secrets` には Secret Manager の Secret の名前だけを書く（値は書かない）。Secret は先に管理者が対象のプロジェクトに作っておく（保存場所は asia-northeast1 のみ）。`probe` には、未サインインで 302 になる画面（例 `/`）と 401 になる API（例 `/api/me`）を書く。`auth` は `m365`（Microsoft 365 サインインのあるアプリ）。会社のアカウントを持たない社員も使うアプリでアプリ独自のログインにするときだけ `app-login` にし、`probe.unauthorized`（未ログインで 401 になる API）を必ず書く。`app-login` は管理者（systemadmin）が `kdeploy approve-auth --name <名前> --reason <理由>` で承認するまで送れない。サインインなしで誰でも開く画面（無記名アンケートの回答サイトなど）は `public` にし、公開しないパス（管理系の API など）で 404 になるものを `probe.not_found` に必ず書く。`public` も管理者が `kdeploy approve-auth --name <名前> --type public --reason <理由>` で承認するまで送れない
+   - **CPU の常時割り当て（`cloudrun.cpu_always_on: true`）は原則禁止**。応答の後も CPU を割り当てるので、インスタンスが起きている間ずっと課金され、Cloud Scheduler の定期呼び出しなどで起き続けると 24 時間 × 7 日の課金になる。`cpu_always_on` は書かない（既定＝応答の間だけ CPU を割り当てる）。応答の後に続く処理（スレッド・`asyncio.create_task`・BackgroundTasks）は、応答を返す前に終わらせるか、Cloud Run ジョブ・Cloud Tasks で別に動かす。どうしても要るときだけ、理由を添えて管理者に `kdeploy approve-cpu --name <名前> --reason <理由>`（期限 180 日。切れたら見直して承認し直す）を頼む。承認が無いと受付が止める。承認があっても、数分ごとに呼ぶ Cloud Scheduler を同じサービスに向けない
 3. **送るファイルを確かめる**：`kdeploy files --dir <プロジェクト>`。`.env`・鍵・`.git`・`node_modules` は自動で外れる。余計なもの（大きなデータ等）があれば `.gitignore` に入れる
 4. **サインイン（初回だけ）**：`kdeploy login` はデバイスコード方式で、ターミナルに URL（https://microsoft.com/devicelogin）とコードが出る。Claude の画面からは入力できないので、**ターミナルのパネルで実行**し（run_in_terminal）、利用者に「表示された URL をブラウザ（スマートフォンでも可）で開き、コードを入れて、デプロイに使うアカウントでサインインしてください」と伝える。この PC ではアプリがブラウザを開く方式だと QR コードの画面で止まるため、`--browser` は使わない
 5. **画面を確かめてもらう（送る前に必ず）**：Cloud Run への反映は 1〜5 分かかるので、直すたびに送らない。手元で起動して利用者に確かめてもらい、OK が出てから 1 回だけ送る
@@ -68,6 +69,7 @@ GitHub の障害中は、受付が GitHub に記録できないためデプロ�
 - 緊急モードを、GitHub が動いているときの近道に使わない（検査は同じで、記録が後回しになるだけ。止められた理由を避けるためには使わない）
 - 上書き防止を迂回しない：`.kusakabe/state.json` の版を手で書き換えない。取り込んだ版を合わせずに `kdeploy merged` を実行しない
 - 組織の GitHub（kusakabe-denki）のリポジトリに直接 push しない（受付と管理者だけが更新できる）
+- 管理者の承認なしに CPU の常時割り当て（`cpu_always_on: true`・`--no-cpu-throttling`）にしない。最小インスタンス（`--min-instances`）を 1 以上にしない
 
 ## 仮ログインの書き方（見本・Python）
 

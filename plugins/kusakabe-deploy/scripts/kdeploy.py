@@ -744,6 +744,17 @@ def cmd_approve_auth(a) -> int:
     return 0
 
 
+def cmd_approve_cpu(a) -> int:
+    """（管理者だけ）CPU の常時割り当て（cloudrun.cpu_always_on: true。原則禁止）を理由と期限を付けて承認する／取り消す"""
+    r = api("POST", "/v1/admin/cpu-approvals", {"app_id": a.name, "reason": a.reason, "days": a.days, "revoke": a.revoke})
+    if r.get("revoked"):
+        print(f"CPU の常時割り当ての承認を取り消しました：{r.get('app_id')}（動いている版はそのまま。次のデプロイから止めます）")
+    else:
+        print(f"CPU の常時割り当てを承認しました：{r.get('app_id')}（{r.get('approved_by')}・期限 {r.get('expires', '')[:10]}）"
+              f"理由：{r.get('reason')}")
+    return 0
+
+
 def cmd_except(a) -> int:
     """（管理者だけ）検査の「止める」項目の例外を台帳に登録する（指紋は deploy の結果に表示される）"""
     r = api("POST", "/v1/admin/exceptions", {"app_id": a.name, "fingerprint": a.fingerprint, "reason": a.reason, "days": a.days})
@@ -850,6 +861,11 @@ def main() -> int:
     p.add_argument("--name", required=True)
     p.add_argument("--type", default="app-login", choices=["app-login", "public"])
     p.add_argument("--reason", required=True)
+    p = sub.add_parser("approve-cpu", help="（管理者）CPU の常時割り当て（cloudrun.cpu_always_on: true。原則禁止）を承認する")
+    p.add_argument("--name", required=True)
+    p.add_argument("--reason", default="", help="なぜ応答の後も CPU が要るか（承認するときは必須）")
+    p.add_argument("--days", type=int, default=180, help="承認の期限（日。最大 365）")
+    p.add_argument("--revoke", action="store_true", help="承認を取り消す")
     p = sub.add_parser("suspend", help="（管理者）乗っ取りの疑いがある人の依頼を即時に止める")
     p.add_argument("--upn", required=True)
     p.add_argument("--reason", default="")
@@ -872,7 +888,7 @@ def main() -> int:
         return 0
     return {"init": cmd_init, "deploy": cmd_deploy, "preview": cmd_preview,"status": cmd_status, "files": cmd_files, "pull": cmd_pull,
             "merged": cmd_merged, "emergency": cmd_emergency, "bcp-replay": cmd_bcp_replay,
-            "approve-auth": cmd_approve_auth, "except": cmd_except, "suspend": cmd_suspend, "unsuspend": cmd_suspend,
+            "approve-auth": cmd_approve_auth, "approve-cpu": cmd_approve_cpu, "except": cmd_except, "suspend": cmd_suspend, "unsuspend": cmd_suspend,
             "suspensions": cmd_suspend, "rebuild": cmd_rebuild}[a.cmd](a)
 
 
