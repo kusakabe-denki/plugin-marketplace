@@ -751,6 +751,52 @@ def cmd_except(a) -> int:
     return 0
 
 
+def cmd_suspend(a) -> int:
+    """（管理者だけ）乗っ取りの疑いがある人の依頼を、発行済みのトークンも含めて即時に止める／解く／一覧"""
+    if a.cmd == "suspensions":
+        r = api("GET", "/v1/admin/suspensions")
+        if not r.get("suspended"):
+            print("利用停止中の人はいません")
+        for s in r.get("suspended") or []:
+            print(f"  {s['upn']}（{s.get('created', '')[:16]}・{s.get('by')}）理由：{s.get('reason')}")
+        return 0
+    if a.cmd == "unsuspend":
+        r = api("POST", "/v1/admin/suspensions/end", {"upn": a.upn})
+        print(f"利用停止を解きました：{r.get('upn')}（{r.get('ended_by')}）")
+        return 0
+    if not a.reason:
+        raise SystemExit("--reason に理由を書いてください（例 --reason \"PC が不正なパッケージを実行した疑い\"）")
+    r = api("POST", "/v1/admin/suspensions", {"upn": a.upn, "reason": a.reason})
+    print(f"利用停止にしました：{r.get('upn')}（{r.get('by')}）。この人の依頼は、発行済みのトークンでも次から受付で断ります")
+    if r.get("stopped"):
+        print("  止めた検査中のデプロイ：" + "、".join(r["stopped"]))
+    if r.get("deploying"):
+        print("  反映中のデプロイ（検査は通過済み・止めていません。結果を確かめてください）：" + "、".join(r["deploying"]))
+    print("  Entra のサインインの取り消し・鍵の差し替えなど、手順書（261016_System-security/docs/incident-dev-pc.html）の残りも進めてください")
+    return 0
+
+
+def cmd_rebuild(a) -> int:
+    """（管理者だけ）本番に出ている版のまま、イメージだけ作り直して反映する（言語本体・OS の修正を取り込む）"""
+    if not a.name and not a.all:
+        raise SystemExit("--name <アプリ> か --all を指定してください")
+    r = api("POST", "/v1/admin/rebuild", {"app_id": a.name, "all": bool(a.all)}, timeout=600)
+    started = []
+    for x in r.get("results") or []:
+        if x.get("deployment_id"):
+            print(f"  {x['app_id']}：作り直しを始めました（{x['deployment_id']}・版 {x.get('commit', '')[:12]}）")
+            started.append(x)
+        else:
+            print(f"  {x['app_id']}：{x.get('skipped') or x.get('error')}")
+    if a.no_wait or not started:
+        return 0 if all(not x.get("error") for x in r.get("results") or []) else 1
+    rc = 0
+    for x in started:
+        print(f"[{x['app_id']}]")
+        rc = max(rc, wait(x["deployment_id"]))
+    return rc
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(prog="kdeploy")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -804,6 +850,17 @@ def main() -> int:
     p.add_argument("--name", required=True)
     p.add_argument("--type", default="app-login", choices=["app-login", "public"])
     p.add_argument("--reason", required=True)
+    p = sub.add_parser("suspend", help="（管理者）乗っ取りの疑いがある人の依頼を即時に止める")
+    p.add_argument("--upn", required=True)
+    p.add_argument("--reason", default="")
+    p = sub.add_parser("unsuspend", help="（管理者）利用停止を解く")
+    p.add_argument("--upn", required=True)
+    sub.add_parser("suspensions", help="（管理者）利用停止の一覧")
+    p = sub.add_parser("rebuild", help="（管理者）本番に出ている版のまま、イメージだけ作り直して反映する")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--name", default="")
+    g.add_argument("--all", action="store_true")
+    p.add_argument("--no-wait", action="store_true")
     a = ap.parse_args()
     if a.cmd == "login":
         login(a.account, a.inprivate) if a.browser else login_device()
@@ -815,7 +872,8 @@ def main() -> int:
         return 0
     return {"init": cmd_init, "deploy": cmd_deploy, "preview": cmd_preview,"status": cmd_status, "files": cmd_files, "pull": cmd_pull,
             "merged": cmd_merged, "emergency": cmd_emergency, "bcp-replay": cmd_bcp_replay,
-            "approve-auth": cmd_approve_auth, "except": cmd_except}[a.cmd](a)
+            "approve-auth": cmd_approve_auth, "except": cmd_except, "suspend": cmd_suspend, "unsuspend": cmd_suspend,
+            "suspensions": cmd_suspend, "rebuild": cmd_rebuild}[a.cmd](a)
 
 
 if __name__ == "__main__":
