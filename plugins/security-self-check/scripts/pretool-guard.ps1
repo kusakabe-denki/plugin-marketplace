@@ -277,6 +277,7 @@ try {
   if ($denies.Count -gt 0) {
     $r = $denies -join "`n"
     Write-HookJson ('{"systemMessage":' + (ConvertTo-JsonText $r) + ',"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":' + (ConvertTo-JsonText $r) + '}}')
+    Start-GuardReport
   } elseif ($asks.Count -gt 0) {
     $r = '会社のセキュリティルールによる確認：' + ($asks -join ' ')
     $extra = if ($warns.Count -gt 0) { ',"systemMessage":' + (ConvertTo-JsonText ($warns -join "`n")) } else { '' }
