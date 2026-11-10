@@ -103,7 +103,8 @@ try {
   # ---- H11 設定・フック・MCP 定義の書き換え ----
   $m11 = Get-GuardMode 'H11'
   if ($m11 -ne 'off' -and ($isWrite -or $isShell)) {
-    $target = '\.claude/(settings(\.local)?\.json|hooks/)|(^|[/\s"''])\.claude\.json\b|(^|[/\s"''])\.mcp\.json\b|\.vscode/settings\.json|managed-settings|managed-mcp\.json|ClaudeCode/'
+    # ClaudeGuard/ は検知の記録（送信待ち・ログ）。消す・書き換える操作も確認の対象にする
+    $target = '\.claude/(settings(\.local)?\.json|hooks/)|(^|[/\s"''])\.claude\.json\b|(^|[/\s"''])\.mcp\.json\b|\.vscode/settings\.json|managed-settings|managed-mcp\.json|ClaudeCode/|ClaudeGuard(/|[''"\s]|$)'
     $hit = $false
     if ($isWrite) { $hit = [regex]::IsMatch($paths, $target, 'IgnoreCase') }
     elseif ([regex]::IsMatch($text, $target, 'IgnoreCase')) {
