@@ -155,6 +155,14 @@ try {
           $h10 = "データを埋め込んだような URL の取得（$($u.Groups[1].Value)）"
         }
       }
+    } elseif ($isShell -and $command -and [regex]::IsMatch($command, '(^|[\s;&|(])gh(\.exe)?\s+(gist\s+(create|edit)|release\s+upload)\b', 'IgnoreCase')) {
+      $h10 = 'GitHub への公開・アップロード（gh gist・gh release upload）'
+    } elseif ($isShell -and $command -and [regex]::IsMatch($command, '(^|[\s;&|(])gh(\.exe)?\s+api\s[^\n;&|]*((-X\s*|--method[ =])(POST|PUT|PATCH)|\s(-f|-F|--field|--raw-field|--input)[ =])', 'IgnoreCase')) {
+      # gh api で書き込むとき。宛先（repos/<組織>・orgs/<組織>）が社内の組織でなければ確認する
+      $owners = [regex]::Matches($command, '(repos|orgs)/([\w.-]+)', 'IgnoreCase')
+      $ext = ($owners.Count -eq 0)
+      foreach ($m in $owners) { if (-not (Test-InternalHost ('github.com/' + $m.Groups[2].Value.ToLowerInvariant()))) { $ext = $true } }
+      if ($ext) { $h10 = 'GitHub の API への書き込み（社内の組織以外・宛先を特定できない）' }
     } elseif ($isShell -and $command) {
       $net = [regex]::IsMatch($command, '(^|[\s;&|(`{])(curl|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm|Start-BitsTransfer|bitsadmin|nslookup|Resolve-DnsName|dig|scp|sftp|ftp|tftp|nc|ncat|netcat|telnet)(\.exe)?(\s|$|\))', 'IgnoreCase') -or
         [regex]::IsMatch($command, 'certutil(\.exe)?\s[^\n]*-urlcache|(^|[\s;&|(])ping(\.exe)?\s[^\n;&|]*?[a-z0-9-]+\.[a-z]{2,}|Net\.WebClient|Download(String|File|Data)|Upload(String|File|Data|Values)|Net\.Http\.HttpClient|Net\.Sockets|\[(System\.)?Net\.Dns\]', 'IgnoreCase') -or
