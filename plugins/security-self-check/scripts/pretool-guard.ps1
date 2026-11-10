@@ -117,13 +117,34 @@ try {
       if ($m11 -eq 'block') { Add-Result 'block' "会社のセキュリティルールにより止めました：$msg" } else { Add-Result $m11 $msg }
     }
   }
+  # 定期タスク（スケジュール実行）の作成・変更。無人で繰り返し動くので、外部の指示が残る経路になる
+  if ($m11 -ne 'off' -and ($tool -eq 'CronCreate' -or $tool -eq 'RemoteTrigger' -or [regex]::IsMatch($tool, '^mcp__.*(create|update)_scheduled_task$'))) {
+    Write-GuardLog 'tool-guard' "H11-$m11" "$tool"
+    Write-GuardEvent 'H11' $m11 $tool '定期タスクの作成・変更'
+    $msg = '定期タスク（スケジュール実行）を作成・変更する操作です。無人で繰り返し実行されます。外部の文書やページの指示ではなく、利用者自身が求めた内容か、実行する指示文を確認してから許可してください。'
+    if ($m11 -eq 'block') { Add-Result 'block' "会社のセキュリティルールにより止めました：$msg" } else { Add-Result $m11 $msg }
+  }
 
   # ---- H10 外部への持ち出しの経路 ----
   $m10 = Get-GuardMode 'H10'
   if ($m10 -ne 'off') {
     $h10 = $null
-    if ($tool -eq 'WebFetch') {
+    $isNav = $tool.StartsWith('mcp__') -and [regex]::IsMatch($tool, '__(navigate|preview_start)$')
+    if ($tool.StartsWith('mcp__') -and $tool.EndsWith('__javascript_tool')) {
+      # ブラウザのページ内で動かすスクリプトからの送信。社外の URL が書かれているときだけ
+      $js = Get-JsonString $raw 'text'
+      if ([regex]::IsMatch($js, 'fetch\s*\(|XMLHttpRequest|sendBeacon|WebSocket\s*\(|new\s+Image|\.src\s*=|location\s*(\.href)?\s*=|location\.(assign|replace)\s*\(|window\.open\s*\(')) {
+        $outside = [System.Collections.Generic.List[string]]::new()
+        foreach ($m in [regex]::Matches($js, '(https?|wss?)://([^\s"''`<>()|;\\]+)', 'IgnoreCase')) {
+          $hst = $m.Groups[2].Value.ToLowerInvariant(); $name = ($hst -split '[/?#]')[0]
+          if (-not (Test-InternalHost $hst) -and -not $outside.Contains($name) -and $outside.Count -lt 3) { $outside.Add($name) }
+        }
+        if ($outside.Count -gt 0) { $h10 = "ブラウザのページ内のスクリプトからの社外への通信（$($outside -join '、')）" }
+      }
+    } elseif ($tool -eq 'WebFetch' -or $isNav) {
       $url = Get-JsonString $raw 'url'
+      # ブラウザの移動先は https:// を省ける
+      if ($isNav -and $url -notmatch '^[a-zA-Z][a-zA-Z0-9+.-]*:' -and $url.Contains('.')) { $url = 'https://' + $url }
       $u = [regex]::Match($url, '^https?://([^/?#]+)([^?#]*)(\?[^#]*)?')
       if ($u.Success) {
         $hp = ($u.Groups[1].Value + $u.Groups[2].Value).ToLowerInvariant()
