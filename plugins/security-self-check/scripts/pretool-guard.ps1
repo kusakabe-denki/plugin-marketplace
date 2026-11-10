@@ -75,6 +75,7 @@ try {
         'SSH 鍵'                   = '/\.ssh([/"''\s\\]|$)|id_rsa|id_ed25519'
         '証明書・秘密鍵'           = '\.(pem|key|pfx|p12)([''"\s\\)]|$)'
         'クラウドの認証情報'       = '/(\.aws|\.azure)([/"''\s\\]|$)|AppData/Roaming/gcloud|\.config/gcloud|\.clasprc\.json|application_default_credentials'
+        'Claude・開発ツールの認証情報' = '\.claude/(\.credentials|remote-settings)\.json|\.git-credentials|(^|[/\s"''])[._]netrc([''"\s]|$)|(~|Users/[^/\s"'']+)/\.npmrc|\.docker/config\.json|\.kube/config|GitHub CLI/hosts\.yml|\.config/gh/hosts\.yml|kusakabe-deploy/token\.bin|\.(ppk|kdbx)([''"\s\\)]|$)|KUSAKABE_GUARD_REPORT_TOKEN'
         'ブラウザの保存パスワード' = 'Login Data|/Cookies|/Local State'
         'Windows 資格情報'         = 'cmdkey\s+/list|Get-StoredCredential|vaultcmd'
         'プロセスの環境変数'       = '/proc/(self|\d+)/environ'
