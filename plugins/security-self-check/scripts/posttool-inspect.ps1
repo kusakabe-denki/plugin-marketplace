@@ -17,6 +17,10 @@ try {
   if (-not $span) { exit 0 }
   $resp = $raw.Substring($span.start, $span.end - $span.start)
   $external = ($tool -eq 'WebFetch' -or $tool -eq 'WebSearch' -or $tool.StartsWith('mcp__'))
+  # アプリ内蔵のツール（表示・セッション管理）と Claude の公式ドキュメントは、AI への指示の説明文を普通に含むので、
+  # 「指示らしい文」の判定から外す（見えない文字・非表示の HTML の検査は続ける）
+  if ($tool.StartsWith('mcp__visualize__') -or $tool.StartsWith('mcp__ccd_')) { $external = $false }
+  if ($tool -eq 'WebFetch' -and [regex]::IsMatch((Get-JsonString $raw 'url'), '^https://((code|docs|platform|support)\.claude\.com|docs\.anthropic\.com)(/|$)', 'IgnoreCase')) { $external = $false }
 
   # 1. 見えない文字
   $h = Get-HiddenCharReport $resp

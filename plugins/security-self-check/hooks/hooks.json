@@ -15,7 +15,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "^(Read|Edit|Write|NotebookEdit|Grep|Glob|Bash|PowerShell|WebFetch)$|^mcp__.*(send|share|forward|reply|post|create_event|update_event|invite)",
+        "matcher": "^(Read|Edit|Write|NotebookEdit|Grep|Glob|Bash|PowerShell|WebFetch|CronCreate|RemoteTrigger)$|^mcp__.*(send|share|forward|reply|post|create_event|update_event|invite|navigate|preview_start|javascript_tool|create_scheduled_task|update_scheduled_task)",
         "hooks": [
           {
             "type": "command",

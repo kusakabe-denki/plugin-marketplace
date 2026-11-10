@@ -83,3 +83,15 @@ function Write-GuardEvent([string]$rule, [string]$mode, [string]$tool, [string]$
     [IO.File]::AppendAllText($path, $line, $script:Utf8)
   } catch {}
 }
+
+# 止めた検知は、応答の終わり（Stop）を待たずにその場で送る（途中で送信待ちの記録を消されても残るように）。
+# 別のプロセスとして起動し、終わるのを待たない（フックの出力を引き継がせない）。失敗しても作業は止めない
+function Start-GuardReport {
+  try {
+    if (-not [Environment]::GetEnvironmentVariable('KUSAKABE_GUARD_REPORT_URL')) { return }
+    $psi = [Diagnostics.ProcessStartInfo]::new('powershell.exe', '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + [IO.Path]::Combine($PSScriptRoot, 'report-send.ps1') + '"')
+    $psi.UseShellExecute = $true
+    $psi.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
+    [void][Diagnostics.Process]::Start($psi)
+  } catch {}
+}
