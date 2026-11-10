@@ -166,10 +166,13 @@ try {
     } elseif ($isShell -and $command) {
       $net = [regex]::IsMatch($command, '(^|[\s;&|(`{])(curl|wget|Invoke-WebRequest|iwr|Invoke-RestMethod|irm|Start-BitsTransfer|bitsadmin|nslookup|Resolve-DnsName|dig|scp|sftp|ftp|tftp|nc|ncat|netcat|telnet)(\.exe)?(\s|$|\))', 'IgnoreCase') -or
         [regex]::IsMatch($command, 'certutil(\.exe)?\s[^\n]*-urlcache|(^|[\s;&|(])ping(\.exe)?\s[^\n;&|]*?[a-z0-9-]+\.[a-z]{2,}|Net\.WebClient|Download(String|File|Data)|Upload(String|File|Data|Values)|Net\.Http\.HttpClient|Net\.Sockets|\[(System\.)?Net\.Dns\]', 'IgnoreCase') -or
-        [regex]::IsMatch($command, '(py|python3?|node)(\.exe)?\s[^\n]*?-(c|e)\s[^\n]*(requests\.|urllib|http\.client|socket\.|fetch\(|https?\.(get|request)|XMLHttpRequest|net\.connect|dns\.)', 'IgnoreCase')
+        [regex]::IsMatch($command, '(py|python3?|node)(\.exe)?\s[^\n]*?-(c|e)\s[^\n]*(requests\.|urllib|http\.client|socket\.|fetch\(|https?\.(get|request)|XMLHttpRequest|net\.connect|dns\.)', 'IgnoreCase') -or
+        # git の送り先を社外に向ける・URL を直接指定して push する
+        [regex]::IsMatch($command, '(^|[\s;&|(])git(\.exe)?\s+(remote\s+(add|set-url)\b|push\s[^\n;&|]*(https?://|[\w.-]+@[\w.-]+:))', 'IgnoreCase')
       if ($net) {
         $hosts = [System.Collections.Generic.List[string]]::new()
         foreach ($m in [regex]::Matches($command, 'https?://([^\s"''`<>()|;]+)', 'IgnoreCase')) { $hosts.Add($m.Groups[1].Value.ToLowerInvariant()) }
+        foreach ($m in [regex]::Matches($command, 'git@([\w.-]+):([\w./-]+)', 'IgnoreCase')) { $hosts.Add(($m.Groups[1].Value + '/' + $m.Groups[2].Value).ToLowerInvariant()) }
         foreach ($m in [regex]::Matches($command, '(nslookup|Resolve-DnsName|dig|ping)(\.exe)?\s+(-\S+\s+)*([A-Za-z0-9._-]+\.[A-Za-z]{2,})', 'IgnoreCase')) { $hosts.Add($m.Groups[4].Value.ToLowerInvariant()) }
         foreach ($m in [regex]::Matches($command, '(scp|sftp)\s[^\n]*?[\w.-]+@([\w.-]+):', 'IgnoreCase')) { $hosts.Add($m.Groups[2].Value.ToLowerInvariant()) }
         $outside = [System.Collections.Generic.List[string]]::new()
