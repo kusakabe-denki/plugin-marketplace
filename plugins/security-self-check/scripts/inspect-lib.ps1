@@ -56,7 +56,7 @@ function Format-HiddenCharReport($r) {
 # ---- AI への指示らしい文（日本語・英語） ----
 $script:InstructionRe = [regex]::new(
   '(ignore|disregard|forget)\s+(all\s+|any\s+|the\s+)?(previous|prior|above|earlier|preceding)\s+(instructions?|prompts?|rules|directions)' +
-  '|\byou\s+are\s+now\s+(a|an|in)\b|\bnew\s+instructions?\s*:|\bsystem\s+prompt\b|</?(system|assistant|instructions?)>' +
+  '|\byou\s+are\s+now\s+(a|an|in)\b|\bnew\s+instructions?\s*:|(reveal|show|print|output|repeat|leak|ignore|override|disregard|forget|bypass|replace)\s+[^\n.]{0,30}\bsystem\s+prompt\b|\bsystem\s+prompt\s*[:：]|</?(system|assistant|instructions?)>' +
   '|\b(note|message|instructions?)\s+(to|for)\s+(the\s+)?(ai|llm|assistant|agent|claude|model)\b|\b(ai|llm)\s+(assistants?|agents?|models?)\s*(must|should|need\s+to|are\s+instructed)' +
   '|do\s+not\s+(tell|inform|mention|reveal)\s+(this\s+)?(to\s+)?the\s+user|without\s+(telling|informing|asking)\s+the\s+user' +
   '|\b(developer|debug|god|test)\s+mode\s+(enabled|activated|on)\b|\bjailbreak\b' +
@@ -64,7 +64,7 @@ $script:InstructionRe = [regex]::new(
   '|(api[\s_-]?keys?|passwords?|tokens?|secrets?|credentials?)\s+[^\n]{0,40}\b(to|via)\s+https?://' +
   '|(run|execute)\s+(the\s+following|this)\s+(command|script|code)' +
   '|(以前|これまで|上記|前|先ほど|今まで)の(指示|命令|ルール|設定)を(すべて|全て)?(無視|忘れ|破棄)|指示を無視して|あなたは(今から|これから)' +
-  '|システムプロンプト|(AI|ＡＩ|エージェント|アシスタント|Claude|LLM)(への|に対する|向けの)(指示|命令)|(AI|ＡＩ|エージェント|アシスタント|Claude)(は|が)[^\n。]{0,20}(しなければならない|すること。|してください)' +
+  '|システムプロンプト[^\n。]{0,20}(無視|表示|出力|教え|見せ|上書き|書き換|開示|漏)|システムプロンプト\s*[:：]|(AI|ＡＩ|エージェント|アシスタント|Claude|LLM)(への|に対する|向けの)(指示|命令)|(AI|ＡＩ|エージェント|アシスタント|Claude)(は|が)[^\n。]{0,20}(しなければならない|すること。|してください)' +
   '|(利用者|ユーザー|人間)に(は)?(伝え|知らせ|報告し|言わ|見せ)(ず|ない)' +
   '|(APIキー|API キー|パスワード|トークン|認証情報|秘密鍵|シークレット|\.env)[^\n。]{0,30}(送信|送って|送れ|アップロード|投稿|転送|貼り付け)' +
   '|(次|以下)のコマンドを(実行|すぐに実行)|(開発者|デバッグ|テスト|管理者)モード(を|に|が)?(有効|切り替|オン|入)',
