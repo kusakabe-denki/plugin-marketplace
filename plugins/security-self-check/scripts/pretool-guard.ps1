@@ -67,6 +67,8 @@ try {
   if ($m2 -ne 'off') {
     $h2 = $null
     if ($isFile -and [regex]::IsMatch($paths, '社外秘|極秘|部外秘|/Confidential/')) { $h2 = '社外秘フォルダ' }
+    # コマンド（cat・Get-Content・type 等）で読む経路。説明文やコミットの文言で止めないよう、パスの形（区切り・拡張子を含む語）だけを見る
+    if (-not $h2 -and $isShell -and [regex]::IsMatch($command.Replace('\', '/'), '/[^\s"''/]*(社外秘|極秘|部外秘)|(社外秘|極秘|部外秘)[^\s"''/]*[/.]')) { $h2 = '社外秘フォルダ' }
     if (-not $h2 -and ($isFile -or $isShell)) {
       $patterns = [ordered]@{
         '.env ファイル'            = '(^|[/"''\s\\=(])\.env([.''"\s\\)]|$)'
