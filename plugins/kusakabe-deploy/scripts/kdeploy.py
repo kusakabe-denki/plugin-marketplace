@@ -17,6 +17,10 @@
   py -3 kdeploy.py emergency on --reason "…" [--hours 24]   （管理者）緊急モードを始める（GitHub が止まったときだけ）
   py -3 kdeploy.py emergency off|status        （管理者）緊急モードを終える／状態と、まだ GitHub に戻していない版を見る
   py -3 kdeploy.py bcp-replay [--name app-xxx] [--merge]   （管理者）緊急モードで出した版を bcp/日付 ブランチに記録し、PR を作る
+  py -3 kdeploy.py approve-secret --name app-xxx --secret <Secret 名> --reason "…" [--revoke]   （管理者）アプリが新しく使う Secret を承認する
+
+Secret の承認（2026-11-10）：app.json の secrets に書いた Secret のうち、そのアプリがまだ読めないものは、管理者の承認が無いと受付が 400 で止める
+（受付を使える人が、ほかのアプリの Secret を自分のアプリに割り当てて読むのを防ぐ）。既に読める Secret はそのまま通る。
 
 緊急モード（2026-11-01）：GitHub が止まっている間、管理者の承認（期限つき）で GitHub への記録を後回しにし、検査 → 反映だけを通す。
 ソースは受付が保管し、復旧後に bcp-replay で main に戻す。戻るまでは、そのアプリの通常のデプロイは止まる。
@@ -242,10 +246,12 @@ def access_token() -> str:
 
 # ------------------------------------------------------------------ 受付への問い合わせ
 class ApiError(SystemExit):
-    """受付のエラー応答。表示は従来どおりで、呼び出し側は code・detail で分けられる"""
-    def __init__(self, code: int, detail):
-        super().__init__(f"受付がエラーを返しました（{code}）：{json.dumps(detail, ensure_ascii=False)[:1500]}")
-        self.code, self.detail = code, detail
+    """受付のエラー応答。表示は従来どおりで、呼び出し側は status・detail で分けられる。
+    HTTP のコードを self.code に入れない（SystemExit の code は終了時に表示する文で、数値で上書きすると
+    エラーの内容が表示されず、終了コードが 400 などになる。2026-11-11 に R1 の本番確認で発覚）"""
+    def __init__(self, status: int, detail):
+        super().__init__(f"受付がエラーを返しました（{status}）：{json.dumps(detail, ensure_ascii=False)[:1500]}")
+        self.status, self.detail = status, detail
 
 
 def api(method: str, path: str, body: dict | None = None, timeout: int = 60) -> dict:
@@ -609,7 +615,7 @@ def cmd_deploy(a) -> int:
         dep = api("POST", "/v1/deployments", {"app_id": cfg["app_id"], "upload_id": up["upload_id"],
                                               "base_commit": base, "overwrite": bool(a.overwrite), "preview": preview})
     except ApiError as e:
-        if e.code == 409 and isinstance(e.detail, dict) and e.detail.get("code") in ("base_conflict", "bcp_conflict", "bcp_unsettled"):
+        if e.status == 409 and isinstance(e.detail, dict) and e.detail.get("code") in ("base_conflict", "bcp_conflict", "bcp_unsettled"):
             print("送りませんでした：" + "／".join(e.detail.get("errors", [])))
             return 3
         raise
@@ -755,6 +761,20 @@ def cmd_approve_cpu(a) -> int:
     return 0
 
 
+def cmd_approve_secret(a) -> int:
+    """（管理者だけ）アプリが新しく使う Secret を承認する／取り消す（承認の無い Secret は、そのアプリが既に読めるものだけ通る）"""
+    r = api("POST", "/v1/admin/secret-approvals", {"app_id": a.name, "secret": a.secret, "reason": a.reason, "revoke": a.revoke})
+    if r.get("revoked"):
+        where = "、".join(r.get("removed_from") or []) or "なし（付いていなかった）"
+        print(f"Secret の承認を取り消しました：{r.get('app_id')} ← {r.get('secret')}（読み取りを外したプロジェクト：{where}）")
+    else:
+        print(f"Secret を承認しました：{r.get('app_id')} ← {r.get('secret')}（{r.get('approved_by')}）理由：{r.get('reason')}")
+        others = [x for x in (r.get("readers") or [])]
+        if others:
+            print("  いまこの Secret を読める SA：" + "、".join(others) + "（ほかのアプリと共有になる場合は、意図どおりか確かめてください）")
+    return 0
+
+
 def cmd_except(a) -> int:
     """（管理者だけ）検査の「止める」項目の例外を台帳に登録する（指紋は deploy の結果に表示される）"""
     r = api("POST", "/v1/admin/exceptions", {"app_id": a.name, "fingerprint": a.fingerprint, "reason": a.reason, "days": a.days})
@@ -866,6 +886,11 @@ def main() -> int:
     p.add_argument("--reason", default="", help="なぜ応答の後も CPU が要るか（承認するときは必須）")
     p.add_argument("--days", type=int, default=180, help="承認の期限（日。最大 365）")
     p.add_argument("--revoke", action="store_true", help="承認を取り消す")
+    p = sub.add_parser("approve-secret", help="（管理者）アプリが新しく使う Secret を承認する（ほかのアプリの Secret を勝手に読ませないため）")
+    p.add_argument("--name", required=True)
+    p.add_argument("--secret", required=True, help="Secret Manager の Secret の名前")
+    p.add_argument("--reason", default="", help="なぜこのアプリがこの Secret を使うか（承認するときは必須）")
+    p.add_argument("--revoke", action="store_true", help="承認を取り消し、読み取りの権限も外す")
     p = sub.add_parser("suspend", help="（管理者）乗っ取りの疑いがある人の依頼を即時に止める")
     p.add_argument("--upn", required=True)
     p.add_argument("--reason", default="")
@@ -888,7 +913,7 @@ def main() -> int:
         return 0
     return {"init": cmd_init, "deploy": cmd_deploy, "preview": cmd_preview,"status": cmd_status, "files": cmd_files, "pull": cmd_pull,
             "merged": cmd_merged, "emergency": cmd_emergency, "bcp-replay": cmd_bcp_replay,
-            "approve-auth": cmd_approve_auth, "approve-cpu": cmd_approve_cpu, "except": cmd_except, "suspend": cmd_suspend, "unsuspend": cmd_suspend,
+            "approve-auth": cmd_approve_auth, "approve-cpu": cmd_approve_cpu, "approve-secret": cmd_approve_secret, "except": cmd_except, "suspend": cmd_suspend, "unsuspend": cmd_suspend,
             "suspensions": cmd_suspend, "rebuild": cmd_rebuild}[a.cmd](a)
 
 
